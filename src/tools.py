@@ -1,5 +1,7 @@
 import os
+from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent.parent
 #目前有的tools
 def calculator(expression:str):
     """
@@ -30,10 +32,11 @@ def read_file(file_name:str):
     :return:
     """
     try:
+        file_name = BASE_DIR/file_name
         with open(file_name,"r",encoding="utf-8") as f:
             return {
                     "success": True,
-                    "file": file_name,
+                    "file": str(file_name),
                     "content": f.read()
 
             }
@@ -41,7 +44,7 @@ def read_file(file_name:str):
     except Exception as e:
         return {
             "success": False,
-            "file": file_name,
+            "file": str(file_name),
             "error_type": type(e).__name__,
             "error": str(e)
         }
@@ -54,19 +57,20 @@ def write_file(file_name:str, content:str):
     :return:
     """
     try:
+        file_name = BASE_DIR / file_name
         with open(file_name, "w", encoding="utf-8") as f:
             f.write(content)
 
         return {
             "success": True,
-            "file": file_name,
+            "file": str(file_name),
             "message": "文件写入成功"
         }
 
     except Exception as e:
         return {
             "success": False,
-            "file": file_name,
+            "file": str(file_name),
             "error_type": type(e).__name__,
             "error": str(e)
         }
@@ -78,41 +82,46 @@ def append_file(file_name:str, content:str):
     :return:
     """
     try:
+        file_name = BASE_DIR / file_name
         with open(file_name, "a", encoding="utf-8") as f:
             f.write(content)
 
         return {
             "success": True,
-            "file": file_name,
+            "file": str(file_name),
             "message": "文件写入成功"
         }
 
     except Exception as e:
         return {
             "success": False,
-            "file": file_name,
+            "file": str(file_name),
             "error_type": type(e).__name__,
             "error": str(e)
         }
 
-def list_file(path:str = "."):
+def list_file(path:str = ""):
     """
     拉取文件列表
     :param path:
     :return:
     """
     try:
-        files = os.listdir(path)
+        if path:
+            dir_path = BASE_DIR / path
+        else:
+            dir_path = BASE_DIR
+        files = os.listdir(dir_path)
         return {
             "success": True,
-            "dir": path,
+            "dir": str(dir_path),
             "files": "\n".join(files)
         }
 
     except Exception as e:
         return {
             "success": False,
-            "dir": path,
+            "dir": str(dir_path),
             "error_type": type(e).__name__,
             "error": str(e)
         }
@@ -125,15 +134,16 @@ def count_file_chars(file_name:str):
     :return:
     """
     try:
+        file_name = BASE_DIR / file_name
         with open(file_name, "r", encoding="utf-8") as f:
             content = f.read()
 
-        cleaned_content = content.replace("\n", "").replace(" ", "")
-        char_count = len(cleaned_content)
+        char_count = sum(1 for ch in content if not ch.isspace())
+
 
         return {
             "success": True,
-            "file": file_name,
+            "file": str(file_name),
             "char_count": char_count,
             "rule": "不统计空格和换行，标点和数字会计入字符数"
         }
@@ -141,7 +151,7 @@ def count_file_chars(file_name:str):
     except Exception as e:
         return {
             "success": False,
-            "file": file_name,
+            "file": str(file_name),
             "error_type": type(e).__name__,
             "error": str(e)
         }

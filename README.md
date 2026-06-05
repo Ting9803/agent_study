@@ -120,7 +120,7 @@ python examples/01_basic_call.py
 运行当前主要练习入口：
 
 ```bash
-python src/main.py
+python src/main_05.py
 ```
 
 如果使用 Windows 虚拟环境，可以先激活：
