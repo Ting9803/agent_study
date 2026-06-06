@@ -1,322 +1,163 @@
-# Agent Study
+# agent_study
 
-这是一个用于记录我从 0 开始学习 LLM Agent / AI 应用开发的练习项目。
+这是一个从零开始学习 AI Agent 的练习项目。项目重点不是直接使用现成框架，而是通过手写 Python 代码，理解 Agent 如何完成工具调用、多轮执行、文件读写、任务规划和进度管理。
 
-这个仓库主要用于保存学习过程中的代码、笔记和踩坑记录。它不是生产级 Agent 框架，而是一个边学边写、边 debug 边复盘的实践项目。
+当前阶段主要围绕本地文件管理与学习记录助手展开：让模型能够根据用户需求调用本地工具，读取文件、写入文件、列目录、统计字符数，并在复杂任务中先生成计划，再按工具执行结果继续推进。
 
-目前学习重点包括：
+## 当前能力
 
-- Python 调用大模型 API
-- prompt 与多轮对话
-- messages 上下文维护
-- tools / function calling 基础流程
-- 多轮 tool call
-- 本地工具执行与结果回传
-- 简单 Agent 执行逻辑
-- 条件判断型 workflow
-- 学习过程中的问题记录和踩坑总结
+- 支持本地工具调用
+  - `calculator`：执行简单计算
+  - `read_file`：读取项目内文件
+  - `write_file`：写入文件
+  - `append_file`：追加文件内容
+  - `list_file`：列出目录内容，并区分文件和文件夹
+  - `count_file_chars`：统计文件字符数
 
----
+- 支持多轮 tool call
+  - 模型可以连续调用多个工具
+  - 每次工具结果会回灌到 `messages`
+  - 直到模型不再请求工具，输出最终回答
+
+- 支持结构化工具返回
+  - 工具返回统一使用 `dict`
+  - `tool_executor.py` 负责将结果转成 JSON 字符串
+  - 便于模型理解成功、失败、错误类型和具体结果
+
+- 支持轻量 Planner
+  - `planner.py` 会先根据用户需求生成任务计划
+  - Planner 只负责规划，不直接执行任务
+  - Planner 会从 `tool_schema.py` 自动读取可用工具信息，避免工具列表维护两份
+
+- 支持进度提醒
+  - 每轮工具调用后，会生成简短的 progress reminder
+  - 避免模型忘记原始任务和当前进度
+  - 将完整日志和模型可见摘要分开，减少上下文重复和 token 浪费
 
 ## 项目结构
 
 ```text
 agent_study/
-├── README.md
+├── src/
+│   ├── main.py              # 启动入口
+│   ├── agent.py             # Agent 主循环，负责用户输入、模型请求、多轮 tool call
+│   ├── planner.py           # 轻量任务规划器
+│   ├── agent_utils.py       # 进度摘要、美化日志打印等辅助函数
+│   ├── tools.py             # 本地工具函数
+│   ├── tool_schema.py       # 工具声明，给模型看的工具说明
+│   ├── tool_executor.py     # 根据模型 tool_call 执行真实 Python 函数
+│   └── config.py            # 模型 client、模型名、环境变量配置
+├── notes/
+│   └── 学习笔记/             # 每日学习笔记
+├── examples/                # 学习过程中的练习代码或示例
+├── tests/                   # 后续测试代码
+├── .env.example             # 环境变量示例
+├── .gitignore
 ├── requirements.txt
-├── .env.example
-├── examples/        # 按学习顺序保存的练习代码
-├── notes/           # 学习笔记和阶段性总结
-├── src/             # 当前主要练习代码
-└── tests/           # 临时测试代码
+└── README.md
 ```
 
-说明：
+## 快速开始
 
-- `examples/`：保留从基础 API 调用到 tools / agent 的学习过程代码。
-- `notes/`：保存每天的学习笔记、问题总结和复盘内容。
-- `src/`：当前正在迭代的小型 Agent 练习代码。
-- `tests/`：临时测试文件。
-
----
-
-## 环境准备
-
-建议使用 Python 虚拟环境。
-
-### 1. 创建虚拟环境
-
-```bash
-python -m venv .venv
-```
-
-### 2. 激活虚拟环境
-
-Windows：
-
-```bash
-.venv\Scripts\activate
-```
-
-macOS / Linux：
-
-```bash
-source .venv/bin/activate
-```
-
-### 3. 安装依赖
+### 1. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-当前主要依赖：
+### 2. 配置环境变量
 
-```text
-zhipuai
-python-dotenv
-```
-
----
-
-## API Key 配置
-
-项目不会上传真实 API Key。
-
-请在项目根目录新建 `.env` 文件：
+在项目根目录创建 `.env` 文件：
 
 ```env
-ZHIPUAI_API_KEY=your_api_key_here
+ZHIPUAI_API_KEY=你的 API Key
 ```
 
-仓库中只保留 `.env.example` 作为示例。
+`.env` 文件不要提交到 GitHub。
 
-代码中通过环境变量读取：
-
-```python
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-api_key = os.getenv("ZHIPUAI_API_KEY")
-```
-
-注意：
-
-- `.env` 文件不要上传到 GitHub。
-- `.gitignore` 中应包含 `.env`、`.venv/`、`__pycache__/` 等内容。
-- 如果使用 PyCharm，可以把 `.idea/` 加入 `.gitignore`。
-
----
-
-## 运行示例
-
-运行某个练习文件：
+### 3. 启动项目
 
 ```bash
-python examples/01_basic_call.py
+python src/main.py
 ```
 
-运行当前主要练习入口：
+退出时输入：
 
-```bash
-python src/main_05.py
+```text
+q
+quit
+exit
 ```
 
-如果使用 Windows 虚拟环境，可以先激活：
-
-```bash
-.venv\Scripts\activate
-```
-
-再运行对应文件。
-
----
-
-## 当前学习内容
-
-### 1. 基础 API 调用
-
-学习如何通过 Python 调用大模型 API，并观察 SDK 返回结果结构。
-
-重点包括：
-
-- client 初始化
-- prompt 输入
-- response 返回结构
-- 模型回复内容的读取方式
-
----
-
-### 2. Prompt 与多轮对话
-
-学习如何组织 `messages`，理解上下文在多轮对话中的作用。
-
-重点包括：
-
-- `system`
-- `user`
-- `assistant`
-- 多轮 messages 追加
-- 上下文如何影响模型回复
-
----
-
-### 3. Tools / Function Calling
-
-学习模型如何根据工具描述生成工具调用请求，以及本地代码如何解析参数、执行函数并回传结果。
-
-当前已实现或练习过的工具包括：
-
-- `calculator`
-- `read_file`
-- `write_file`
-- `append_file`
-- `list_file`
-- `count_file_chars`
-
----
-
-### 4. 多轮 Tool Call
-
-练习让模型连续调用多个工具，完成一个多步骤任务。
-
-基本流程：
+## 当前主流程
 
 ```text
 用户输入
-→ 请求模型
-→ 模型返回 tool_call
-→ 本地执行工具
-→ 工具结果作为 tool message 回传
-→ 再次请求模型
-→ 模型继续判断下一步
-→ 最终回答
+↓
+planner.py 生成任务计划
+↓
+agent.py 把用户需求 + 任务计划加入 messages
+↓
+模型判断是否需要调用工具
+↓
+tool_executor.py 执行工具
+↓
+工具结果回灌 messages
+↓
+agent_utils.py 生成当前进度提醒
+↓
+模型继续判断下一步
+↓
+任务完成后输出最终回答
 ```
-
-已经测试过的任务包括：
-
-```text
-写入 poem2.txt
-读取 poem.txt 和 poem2.txt
-分别统计字符数
-计算总字符数
-根据条件改写文件
-重新统计并输出最终结果
-```
-
----
-
-### 5. 结构化 Tool Return
-
-工具返回值统一使用结构化 `dict`，例如：
-
-```python
-return {
-    "success": True,
-    "file": file_name,
-    "char_count": char_count,
-    "rule": "不统计空格和换行，标点和数字会计入字符数"
-}
-```
-
-失败时返回：
-
-```python
-return {
-    "success": False,
-    "error_type": type(e).__name__,
-    "error": str(e)
-}
-```
-
-这样模型可以更稳定地理解工具执行结果。
-
----
-
-### 6. Tool Executor
-
-`tool_executor.py` 负责根据模型返回的 tool call，找到对应工具并执行。
-
-核心逻辑：
-
-```python
-result = tool_map[function_name](**function_args)
-```
-
-然后把工具返回结果转成 JSON 字符串，作为 `tool message` 的 `content`：
-
-```python
-content = json.dumps(result, ensure_ascii=False)
-```
-
-当前理解：
-
-```text
-tools.py          负责具体工具逻辑
-tool_schema.py    负责描述工具能力和参数
-tool_executor.py  负责分发工具和包装 tool message
-main.py           负责对话循环和 messages 管理
-```
-
----
-
-### 7. 简单 Agent Workflow
-
-目前已经跑通一个简单条件判断流程：
-
-```text
-统计 poem.txt 和 poem2.txt 的字符数
-→ 判断总字符数是否超过 100
-→ 如果超过，就改写 poem2.txt
-→ 再次统计两个文件字符数
-→ 输出最终结果
-```
-
-这一步开始从单纯的 function calling 过渡到简单 Agent workflow。
-
----
-
-## 踩坑记录
-
-学习过程中遇到并记录的问题包括：
-
-- API Key 不应该写死在代码里
-- `.env` 应该放进 `.gitignore`
-- SDK 返回对象和普通字典不一样
-- messages 需要持续追加，模型才能看到上下文
-- tool call 的 arguments 是 JSON 字符串，需要 `json.loads`
-- tool message 的 content 需要是字符串
-- Python `dict` 放进 `content` 前建议用 `json.dumps`
-- `return {{...}}` 会导致 `unhashable type: 'dict'`
-- 工具参数名要和 schema 中的参数名保持一致
-- 文件字符数统计需要明确规则，例如是否统计空格、换行、标点和数字
-
----
 
 ## 学习进度
 
-目前大致进度：
+### Day 01：Tools 基础链路
+
+理解 tools 的基本概念，初步跑通模型调用本地函数的流程。
+
+### Day 02：Tools 工具调用
+
+继续练习工具声明、参数传递和模型如何选择工具。
+
+### Day 03：多工具与本地文件操作
+
+加入文件读取、写入等本地工具，开始理解工具与真实环境的连接。
+
+### Day 04：项目结构整理
+
+将工具函数、工具声明、执行器和主流程拆分到不同文件中，形成更清晰的项目结构。
+
+### Day 05：错误处理、结构化返回与简单 workflow
+
+统一工具返回格式，加入错误处理和 `task_log`，跑通“统计 → 判断 → 改写 → 复查”的简单条件流程。
+
+### Day 06：main.py 整合、项目路径与工具调用验证
+
+解决 `src` 与项目根目录之间的路径问题，让工具能够稳定访问 `notes` 等项目目录，并验证组合任务。
+
+### Day 07：Planner 与进度提醒
+
+加入轻量 Planner，让 Agent 在执行前先生成任务计划；同时加入 progress reminder，区分给人看的完整日志和给模型看的简短进度摘要，初步理解上下文管理和 token 成本问题。
+
+## 当前重点理解
+
+这个项目目前不是为了追求复杂架构，而是通过最小可运行代码理解 Agent 的几个核心问题：
 
 ```text
-Day 01：基础 API 调用
-Day 02：messages 与多轮对话
-Day 03：tools / function calling 基础
-Day 04：多轮 tool call 消化
-Day 05：结构化 tool return、task_log、条件判断 workflow
+tools：Agent 如何连接外部能力
+executor：模型请求如何变成真实函数调用
+planner：复杂任务如何先拆步骤
+progress reminder：长任务中如何提醒模型当前进度
+日志：如何观察模型到底调用了什么工具、传了什么参数、拿到了什么结果
+上下文管理：哪些内容应该完整保留，哪些内容应该压缩摘要
 ```
 
-后续计划：
+## 后续计划
 
-```text
-Day 06：简单 planner / 任务状态管理
-后续：MCP、RAG、本地知识库、更多 Agent workflow 实践
-```
-
----
-
-## 说明
-
-这个仓库主要用于展示学习过程、代码练习和阶段性理解。
-
-代码会尽量保持简单、可运行、便于复盘。后续如果学习到新的 Agent 相关内容，会继续补充到 `examples/`、`src/` 和 `notes/` 中。
+- 继续完善 Planner 与任务状态管理
+- 尝试加入 re-plan：根据工具结果动态调整计划
+- 学习 MCP，理解工具接入的标准化方式
+- 学习 RAG，理解如何让 Agent 检索和使用外部知识
+- 增加测试用例，验证工具函数和主流程稳定性

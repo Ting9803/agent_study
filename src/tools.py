@@ -33,6 +33,23 @@ def read_file(file_name:str):
     """
     try:
         file_name = BASE_DIR/file_name
+        if not file_name.exists():
+            return {
+                "success": False,
+                "file": str(file_name),
+                "error_type": "FileNotFoundError",
+                "error": "文件不存在"
+            }
+
+        if file_name.is_dir():
+            return {
+                "success": False,
+                "file": str(file_name),
+                "error_type": "IsADirectoryError",
+                "error": "这是一个文件夹，不是文件。请先使用 list_file 查看该目录下的文件。"
+            }
+
+
         with open(file_name,"r",encoding="utf-8") as f:
             return {
                     "success": True,
@@ -100,22 +117,38 @@ def append_file(file_name:str, content:str):
             "error": str(e)
         }
 
-def list_file(path:str = ""):
-    """
-    拉取文件列表
-    :param path:
-    :return:
-    """
+def list_file(path: str = ".") -> dict:
+    dir_path = BASE_DIR / path
+
     try:
-        if path:
-            dir_path = BASE_DIR / path
-        else:
-            dir_path = BASE_DIR
-        files = os.listdir(dir_path)
+        if not dir_path.exists():
+            return {
+                "success": False,
+                "dir": str(dir_path),
+                "error_type": "FileNotFoundError",
+                "error": "目录不存在"
+            }
+
+        if not dir_path.is_dir():
+            return {
+                "success": False,
+                "dir": str(dir_path),
+                "error_type": "NotADirectoryError",
+                "error": "这个路径不是目录，不能列出文件"
+            }
+
+        items = []
+
+        for item in dir_path.iterdir():
+            if item.is_dir():
+                items.append(f"[dir] {item.name}")
+            else:
+                items.append(f"[file] {item.name}")
+
         return {
             "success": True,
             "dir": str(dir_path),
-            "files": "\n".join(files)
+            "files": "\n".join(items)
         }
 
     except Exception as e:
