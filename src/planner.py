@@ -2,7 +2,20 @@ import json
 from config import client,MODEL_NAME
 from tool_schema import tools
 
+
 def get_tool_infos() ->list[dict]:
+    """
+    获取当前能够使用的工具信息
+    :return:
+    {
+                {
+                "name":function_info["name"],
+                "description":function_info.get("description","")
+            }，
+            {…………
+            }
+    }
+    """
     tool_infos = []
     for tool in tools:
         function_info = tool["function"]
@@ -68,6 +81,11 @@ def clean_json_content(content: str) -> str:
     return content
 
 def validate_plan_tools(plan: dict) -> dict:
+    """
+    看工具名是否可用，不可用就加个note
+    :param plan:
+    :return:
+    """
     valid_tool_names = {
         tool["function"]["name"]
         for tool in tools
@@ -89,7 +107,8 @@ def validate_plan_tools(plan: dict) -> dict:
 
 def make_plan(user_input :str) -> dict:
     """
-    让模型先根据用户需求生成任务计划。
+    让模型先根据用户需求生成任务计划，不管初始化和执行状态
+    :parameter user_input:str
     :return
     {
   "goal": "用户最终想完成什么",
@@ -97,7 +116,7 @@ def make_plan(user_input :str) -> dict:
     {
       "step": 1,
       "action": "这一步需要做什么",
-      "tool": "需要使用的工具名，如果不需要就写 null"
+      "tool": "需要使用的工具名，如果不需要就写 None"
     }
   ]
 }

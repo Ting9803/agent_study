@@ -34,11 +34,13 @@ def summarize_tool_result(tool_name: str, arguments: str, result_content: str) -
         return {
             "tool_name": tool_name,
             "arguments": arguments,
-            "status": "unknown",
-            "summary": result_content[:200]
+            "status": "failed",
+            "error_type": "JSONDecodeError",
+            "error": "工具返回结果不是合法 JSON",
+            "summary": result_content[:100]
         }
 
-    success = result.get("success")
+    success = result.get("success", False)
 
     if success is False:
         return {
@@ -94,38 +96,54 @@ def summarize_tool_result(tool_name: str, arguments: str, result_content: str) -
             "tool_name": tool_name,
             "arguments": arguments,
             "status": "success",
-            "result": result
+            "expression": result.get("expression"),
+            "result": result.get("result")
         }
 
     return {
         "tool_name": tool_name,
         "arguments": arguments,
         "status": "success",
-        "summary": str(result)[:200]
+        "summary": str(result)[:100]
     }
+# 不要了，换成build_plan_progress_message
+# def build_progress_message(plan: dict, progress_log: list) -> dict:
+#     """
+#     构造当前进度提醒。
+#     只放简短摘要，不重复放完整文件内容。
+#     """
+#
+#     recent_progress = progress_log[-5:]
+#
+#     return {
+#         "role": "user",
+#         "content": f"""
+# 当前任务计划：
+# {json.dumps(plan, ensure_ascii=False, indent=2)}
+#
+# 已完成步骤摘要：
+# {json.dumps(recent_progress, ensure_ascii=False, indent=2)}
+#
+# 请根据以上进度继续完成任务。
+# 不要重复已经完成的工具调用。
+# 如果还需要工具，请继续调用工具。
+# 如果任务已经完成，请直接给出最终回答。
+# 不要假装已经完成未调用的工具操作。
+# """
+#     }
 
-
-def build_progress_message(plan: dict, progress_log: list) -> dict:
+def format_progress_log(progress_log):
     """
-    构造当前进度提醒。
-    只放简短摘要，不重复放完整文件内容。
+    将 progress_log 里的工具摘要字典转换成给模型看的文本。
     """
+    lines = []
 
-    recent_progress = progress_log[-5:]
+    for index, item in enumerate(progress_log, start=1):
+        lines.append(
+            f"{index}. 工具：{item.get('tool_name')}\n"
+            f"   参数：{item.get('arguments')}\n"
+            f"   状态：{item.get('status')}\n"
+            f"   摘要：{item.get('summary')}"
+        )
 
-    return {
-        "role": "user",
-        "content": f"""
-当前任务计划：
-{json.dumps(plan, ensure_ascii=False, indent=2)}
-
-已完成步骤摘要：
-{json.dumps(recent_progress, ensure_ascii=False, indent=2)}
-
-请根据以上进度继续完成任务。
-不要重复已经完成的工具调用。
-如果还需要工具，请继续调用工具。
-如果任务已经完成，请直接给出最终回答。
-不要假装已经完成未调用的工具操作。
-"""
-    }
+    return "\n".join(lines)
