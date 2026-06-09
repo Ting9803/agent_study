@@ -1,163 +1,268 @@
 # agent_study
 
-这是一个从零开始学习 AI Agent 的练习项目。项目重点不是直接使用现成框架，而是通过手写 Python 代码，理解 Agent 如何完成工具调用、多轮执行、文件读写、任务规划和进度管理。
+这是一个用于学习 Agent 工程基础的 Python 项目。
 
-当前阶段主要围绕本地文件管理与学习记录助手展开：让模型能够根据用户需求调用本地工具，读取文件、写入文件、列目录、统计字符数，并在复杂任务中先生成计划，再按工具执行结果继续推进。
+项目从最基础的 tools 调用开始，逐步实现本地文件读写、工具执行、任务规划、计划状态管理、失败恢复和执行历史记录。当前目标不是直接使用成熟框架，而是通过手写代码理解 Agent 的核心运行机制。
 
-## 当前能力
+## 当前已实现功能
 
-- 支持本地工具调用
-  - `calculator`：执行简单计算
-  - `read_file`：读取项目内文件
-  - `write_file`：写入文件
-  - `append_file`：追加文件内容
-  - `list_file`：列出目录内容，并区分文件和文件夹
-  - `count_file_chars`：统计文件字符数
+* 基础工具调用
 
-- 支持多轮 tool call
-  - 模型可以连续调用多个工具
-  - 每次工具结果会回灌到 `messages`
-  - 直到模型不再请求工具，输出最终回答
+  * 数学计算
+  * 读取文件
+  * 写入文件
+  * 追加写入文件
+  * 列出目录
+  * 统计文件字符数
 
-- 支持结构化工具返回
-  - 工具返回统一使用 `dict`
-  - `tool_executor.py` 负责将结果转成 JSON 字符串
-  - 便于模型理解成功、失败、错误类型和具体结果
+* 多轮 tool call 执行
 
-- 支持轻量 Planner
-  - `planner.py` 会先根据用户需求生成任务计划
-  - Planner 只负责规划，不直接执行任务
-  - Planner 会从 `tool_schema.py` 自动读取可用工具信息，避免工具列表维护两份
+  * 模型可以连续调用多个工具
+  * 工具结果会写回 messages
+  * 模型根据工具结果继续执行或生成最终回答
 
-- 支持进度提醒
-  - 每轮工具调用后，会生成简短的 progress reminder
-  - 避免模型忘记原始任务和当前进度
-  - 将完整日志和模型可见摘要分开，减少上下文重复和 token 浪费
+* Planner 任务规划
+
+  * 根据用户输入生成任务计划
+  * 计划包含 goal 和 steps
+  * 每个 step 包含 action 和建议 tool
+
+* Plan State 状态管理
+
+  * 将静态计划转换为可追踪的执行状态
+  * 支持 pending / running / done / failed
+  * 工具执行成功或失败后自动更新步骤状态
+  * 支持失败后的后续任务推进
+
+* 工具执行摘要
+
+  * 将完整工具结果压缩成 progress_log
+  * 避免重复把大段文件内容塞回模型上下文
+  * 降低 token 消耗
+
+* 执行历史记录
+
+  * 新增 run_logger.py
+  * 每次任务完成后写入 logs/run_history.jsonl
+  * 记录 user_input、plan、final_plan_state、task_log、final_answer
+  * 将 task_log 中的 arguments / result 从 JSON 字符串转成 dict，方便后续分析
 
 ## 项目结构
 
 ```text
 agent_study/
-├── src/
-│   ├── main.py              # 启动入口
-│   ├── agent.py             # Agent 主循环，负责用户输入、模型请求、多轮 tool call
-│   ├── planner.py           # 轻量任务规划器
-│   ├── agent_utils.py       # 进度摘要、美化日志打印等辅助函数
-│   ├── tools.py             # 本地工具函数
-│   ├── tool_schema.py       # 工具声明，给模型看的工具说明
-│   ├── tool_executor.py     # 根据模型 tool_call 执行真实 Python 函数
-│   └── config.py            # 模型 client、模型名、环境变量配置
-├── notes/
-│   └── 学习笔记/             # 每日学习笔记
-├── examples/                # 学习过程中的练习代码或示例
-├── tests/                   # 后续测试代码
-├── .env.example             # 环境变量示例
-├── .gitignore
-├── requirements.txt
-└── README.md
+│
+├─ src/
+│  ├─ main.py
+│  ├─ agent.py
+│  ├─ planner.py
+│  ├─ plan_state.py
+│  ├─ agent_utils.py
+│  ├─ run_logger.py
+│  ├─ tool_schema.py
+│  ├─ tool_executor.py
+│  ├─ tools.py
+│  └─ config.py
+│
+├─ docs/
+│  ├─ architecture.md
+│  └─ function_reference.md
+│
+├─ notes/
+│  └─ 学习笔记/
+│
+├─ logs/
+│  └─ run_history.jsonl
+│
+├─ examples/
+├─ tests/
+├─ README.md
+├─ requirements.txt
+├─ .env.example
+├─ .gitignore
+└─ LICENSE
 ```
 
-## 快速开始
+## 核心执行流程
 
-### 1. 安装依赖
+```text
+用户输入
+↓
+planner 生成任务计划
+↓
+init_plan_state 初始化计划状态
+↓
+模型根据计划判断是否需要调用工具
+↓
+execute_tool_call 执行工具
+↓
+根据工具返回结果更新 plan_state
+↓
+summarize_tool_result 生成工具摘要
+↓
+模型继续执行或输出最终回答
+↓
+save_run_history 保存本轮执行记录
+```
+
+## 计划状态结构
+
+原始计划结构：
+
+```python
+{
+    "goal": "用户最终想完成什么",
+    "steps": [
+        {
+            "step": 1,
+            "action": "这一步需要做什么",
+            "tool": "需要使用的工具名，如果不需要则为 None"
+        }
+    ]
+}
+```
+
+执行状态结构：
+
+```python
+{
+    "goal": "用户最终想完成什么",
+    "steps": [
+        {
+            "id": 1,
+            "action": "这一步需要做什么",
+            "tool": "工具名或 None",
+            "status": "pending"
+        }
+    ]
+}
+```
+
+当前支持的状态：
+
+```text
+pending：等待执行
+running：正在执行
+done：执行完成
+failed：执行失败
+```
+
+## 执行历史记录
+
+项目会将每次 Agent 执行过程保存到：
+
+```text
+logs/run_history.jsonl
+```
+
+每条记录包含：
+
+```python
+{
+    "created_at": "记录创建时间",
+    "user_input": "用户输入",
+    "plan": "planner 生成的原始计划",
+    "final_plan_state": "最终计划状态",
+    "task_log": "工具调用记录",
+    "final_answer": "最终回答"
+}
+```
+
+这部分用于后续 debug、复盘、失败分析，以及未来扩展 memory / RAG。
+
+## 安装与运行
+
+### 1. 克隆项目
+
+```bash
+git clone https://github.com/Ting9803/agent_study.git
+cd agent_study
+```
+
+### 2. 创建虚拟环境
+
+```bash
+python -m venv .venv
+```
+
+Windows 下激活：
+
+```bash
+.venv\Scripts\activate
+```
+
+### 3. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量
+### 4. 配置环境变量
 
-在项目根目录创建 `.env` 文件：
+复制 `.env.example` 并创建 `.env`：
 
-```env
-ZHIPUAI_API_KEY=你的 API Key
+```text
+ZHIPUAI_API_KEY=your_api_key_here
 ```
 
-`.env` 文件不要提交到 GitHub。
-
-### 3. 启动项目
+### 5. 启动项目
 
 ```bash
 python src/main.py
 ```
 
-退出时输入：
+## 示例任务
 
 ```text
-q
-quit
-exit
+帮我列出当前目录
 ```
-
-## 当前主流程
 
 ```text
-用户输入
-↓
-planner.py 生成任务计划
-↓
-agent.py 把用户需求 + 任务计划加入 messages
-↓
-模型判断是否需要调用工具
-↓
-tool_executor.py 执行工具
-↓
-工具结果回灌 messages
-↓
-agent_utils.py 生成当前进度提醒
-↓
-模型继续判断下一步
-↓
-任务完成后输出最终回答
+帮我读取一个不存在的 abc.txt，如果失败，就列出当前目录
 ```
-
-## 学习进度
-
-### Day 01：Tools 基础链路
-
-理解 tools 的基本概念，初步跑通模型调用本地函数的流程。
-
-### Day 02：Tools 工具调用
-
-继续练习工具声明、参数传递和模型如何选择工具。
-
-### Day 03：多工具与本地文件操作
-
-加入文件读取、写入等本地工具，开始理解工具与真实环境的连接。
-
-### Day 04：项目结构整理
-
-将工具函数、工具声明、执行器和主流程拆分到不同文件中，形成更清晰的项目结构。
-
-### Day 05：错误处理、结构化返回与简单 workflow
-
-统一工具返回格式，加入错误处理和 `task_log`，跑通“统计 → 判断 → 改写 → 复查”的简单条件流程。
-
-### Day 06：main.py 整合、项目路径与工具调用验证
-
-解决 `src` 与项目根目录之间的路径问题，让工具能够稳定访问 `notes` 等项目目录，并验证组合任务。
-
-### Day 07：Planner 与进度提醒
-
-加入轻量 Planner，让 Agent 在执行前先生成任务计划；同时加入 progress reminder，区分给人看的完整日志和给模型看的简短进度摘要，初步理解上下文管理和 token 成本问题。
-
-## 当前重点理解
-
-这个项目目前不是为了追求复杂架构，而是通过最小可运行代码理解 Agent 的几个核心问题：
 
 ```text
-tools：Agent 如何连接外部能力
-executor：模型请求如何变成真实函数调用
-planner：复杂任务如何先拆步骤
-progress reminder：长任务中如何提醒模型当前进度
-日志：如何观察模型到底调用了什么工具、传了什么参数、拿到了什么结果
-上下文管理：哪些内容应该完整保留，哪些内容应该压缩摘要
+帮我列出 notes 目录，找到第八天学习笔记并读取出来，总结成 100 字以内
 ```
+
+## 当前学习进度
+
+* Day 01：理解 tools 基础链路
+* Day 02：实现工具调用
+* Day 03：多工具与本地文件操作
+* Day 04：项目结构整理
+* Day 05：错误处理
+* Day 06：main 主流程整合
+* Day 07：Planner 与进度提醒
+* Day 08：计划状态管理与失败恢复
+* Day 09：run_history 与 Agent 执行记录
 
 ## 后续计划
 
-- 继续完善 Planner 与任务状态管理
-- 尝试加入 re-plan：根据工具结果动态调整计划
-- 学习 MCP，理解工具接入的标准化方式
-- 学习 RAG，理解如何让 Agent 检索和使用外部知识
-- 增加测试用例，验证工具函数和主流程稳定性
+接下来计划继续学习：
+
+```text
+1. 本地知识检索
+2. 轻量版 RAG
+3. Markdown chunk 切片
+4. embedding 与向量检索
+5. MCP 工具协议
+```
+
+当前下一步会优先做本地知识检索，让 Agent 不只按路径读取文件，也能根据关键词搜索 notes / docs 中的相关内容。
+
+## 说明
+
+这个项目主要用于学习 Agent 的底层运行逻辑，因此暂时没有直接使用 LangChain、LlamaIndex 等成熟框架。
+
+当前重点是通过手写代码理解：
+
+```text
+工具声明
+工具执行
+任务规划
+状态管理
+失败恢复
+执行记录
+后续记忆与 RAG 的基础数据结构
+```

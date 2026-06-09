@@ -13,8 +13,10 @@ from plan_state import (
     get_next_pending_step,
     update_step_status,
     build_plan_progress_message,
-    validate_plan_state
+    validate_plan_state,
+    get_step_for_tool_call
 )
+from run_logger import save_run_history
 
 
 def run_agent( ):
@@ -26,7 +28,10 @@ def run_agent( ):
     messages = [
         {
             "role": "system",
-            "content": "你是本地文件管理 + 学习记录助手的小助手，需要时可以完成文件读写、追加、统计、列目录、总结学习记录等任务"
+            "content": """你是本地文件管理 + 学习记录助手。
+回答要简洁、直接，不要使用夸张语气。
+如果工具已经执行，只总结关键结果。
+不要重复大段工具日志。"""
         }
     ]
 
@@ -91,7 +96,9 @@ def run_agent( ):
                 # 并且要根据toolcall调用工具
                 for tool_call in answer.tool_calls:
                     # 找到当前要执行的计划步骤
-                    current_step = get_next_pending_step(plan_state)
+                    tool_name = tool_call.function.name
+                    current_step = get_step_for_tool_call(plan_state, tool_name)
+
                     #print("当前步骤：", current_step)
                     # 工具调用前：标记为 running
                     if current_step:
@@ -101,7 +108,7 @@ def run_agent( ):
                     tool_msg = execute_tool_call(tool_call)
                     messages.append(tool_msg)
 
-                    tool_name = tool_call.function.name
+                    #tool_name = tool_call.function.name
                     arguments = tool_call.function.arguments
                     result_content = tool_msg["content"]
 
@@ -141,6 +148,7 @@ def run_agent( ):
 
                 # 当前进度提醒：放当前计划执行状态
                 progress_text = format_progress_log(progress_log)
+                print(progress_text)
                 messages.append(
                     {
                         "role":"user",
@@ -165,11 +173,19 @@ def run_agent( ):
             )
             #如果步骤没有 tool call。模型直接回答最终总结时，这一步也应该标记成 done。
             final_step = get_next_pending_step(plan_state)
-
             if final_step and final_step.get("tool") is None:
                 update_step_status(plan_state, final_step["id"], "done")
+            print(build_plan_progress_message(plan_state))
 
             print(f"AI小助手：{answer.content}")
+
+            save_run_history(
+                user_input=user_input,
+                plan=plan,
+                final_plan_state=plan_state,
+                task_log=task_log,
+                final_answer=answer.content
+            )
 
             if task_log:
                 print("本轮工具调用：")

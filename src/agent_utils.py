@@ -138,12 +138,21 @@ def format_progress_log(progress_log):
     """
     lines = []
 
-    for index, item in enumerate(progress_log, start=1):
+    for index, item in enumerate(progress_log,start=1):
+        summary = (
+            item.get("summary")
+            or item.get("message")
+            or item.get("files")
+            or item.get("result")
+            or item.get("error")
+            or ""
+        )
+
         lines.append(
             f"{index}. 工具：{item.get('tool_name')}\n"
             f"   参数：{item.get('arguments')}\n"
             f"   状态：{item.get('status')}\n"
-            f"   摘要：{item.get('summary')}"
+            f"   摘要：{summary}"
         )
 
     return "\n".join(lines)
